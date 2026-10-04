@@ -29,6 +29,7 @@ CREATED, READY_FOR_COLLECTION, COLLECTED, CANCELLED, EXPIRED.
 - Before changing anything, list the files you will touch and wait for approval.
 - After changing code, tell me exactly how to test it.
 - Do not install new packages without asking.
+- Do not read .env files. Use .env.example to see which variables exist.
 - Never commit or push unless I ask. Never touch the main branch.
 - Never run destructive commands such as `docker compose down -v` or delete data folders.
 
