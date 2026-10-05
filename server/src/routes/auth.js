@@ -7,6 +7,7 @@ import {
   SESSION_TTL_DAYS,
 } from '../auth/token.js';
 import { validateRegistration, validateLogin } from '../validation.js';
+import { requireAuth } from '../auth/requireAuth.js';
 
 const authRouter = express.Router();
 
@@ -98,6 +99,22 @@ authRouter.post('/login', async (req, res) => {
     expires_at: session.rows[0].expires_at,
     user: safeUser,
   });
+});
+
+authRouter.get('/me', requireAuth, (req, res) => {
+  res.status(200).json({ user: req.user });
+});
+
+authRouter.post('/logout', requireAuth, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM sessions WHERE token_hash = $1', [
+      req.tokenHash,
+    ]);
+  } catch (err) {
+    // Swallow query errors to keep the response consistent and avoid leaking details
+  }
+
+  res.status(204).end();
 });
 
 export { authRouter };
