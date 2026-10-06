@@ -1,7 +1,7 @@
 import express from 'express';
 import { pool } from '../db.js';
 import { hashPassword } from '../auth/password.js';
-import { validateRegistration, validateStore } from '../validation.js';
+import { validateRegistration, validateStore, isValidUuid } from '../validation.js';
 import { requireAuth } from '../auth/requireAuth.js';
 import { requireRole } from '../auth/requireRole.js';
 
@@ -107,6 +107,91 @@ adminRouter.get(
     } catch (err) {
       console.error('Admin list stores failed:', err.message);
       res.status(500).json({ error: 'Could not fetch stores.' });
+    }
+  },
+);
+
+adminRouter.patch(
+  '/users/:id/store',
+  requireAuth,
+  requireRole('admin'),
+  async (req, res) => {
+    const userId = req.params.id;
+
+    if (!isValidUuid(userId)) {
+      res.status(400).json({ error: 'Invalid user id.' });
+      return;
+    }
+
+    let userResult;
+    try {
+      userResult = await pool.query(
+        `SELECT ${PUBLIC_USER_COLUMNS} FROM users WHERE id = $1`,
+        [userId],
+      );
+    } catch (err) {
+      console.error('Admin attach store failed:', err.message);
+      res.status(500).json({ error: 'Could not update the user.' });
+      return;
+    }
+
+    const user = userResult.rows[0];
+    if (!user) {
+      res.status(404).json({ error: 'User not found.' });
+      return;
+    }
+
+    if (user.role !== 'store_staff') {
+      res
+        .status(400)
+        .json({ error: 'Only store_staff users can be attached to a store.' });
+      return;
+    }
+
+    const body = req.body ?? {};
+    const storeId = body.store_id;
+
+    if (storeId !== null) {
+      if (!isValidUuid(storeId)) {
+        res.status(400).json({ error: 'Invalid store id.' });
+        return;
+      }
+
+      let storeResult;
+      try {
+        storeResult = await pool.query(
+          'SELECT is_active FROM stores WHERE id = $1',
+          [storeId],
+        );
+      } catch (err) {
+        console.error('Admin attach store failed:', err.message);
+        res.status(500).json({ error: 'Could not update the user.' });
+        return;
+      }
+
+      const store = storeResult.rows[0];
+      if (!store) {
+        res.status(404).json({ error: 'Store not found.' });
+        return;
+      }
+
+      if (!store.is_active) {
+        res.status(400).json({ error: 'Store is not active.' });
+        return;
+      }
+    }
+
+    try {
+      const result = await pool.query(
+        `UPDATE users SET store_id = $1 WHERE id = $2
+         RETURNING ${PUBLIC_USER_COLUMNS}`,
+        [storeId, userId],
+      );
+
+      res.status(200).json({ user: result.rows[0] });
+    } catch (err) {
+      console.error('Admin attach store failed:', err.message);
+      res.status(500).json({ error: 'Could not update the user.' });
     }
   },
 );

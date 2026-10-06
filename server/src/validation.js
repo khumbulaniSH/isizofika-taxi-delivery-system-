@@ -1,6 +1,11 @@
 const PHONE_PATTERN = /^\+[0-9]{8,15}$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MIN_PASSWORD_LENGTH = 8;
+
+export function isValidUuid(value) {
+  return typeof value === 'string' && UUID_PATTERN.test(value);
+}
 
 export function normalizePhone(value) {
   return typeof value === 'string' ? value.trim() : '';
