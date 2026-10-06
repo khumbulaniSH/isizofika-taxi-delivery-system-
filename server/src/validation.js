@@ -76,3 +76,26 @@ export function validateChangePassword(body) {
 
   return { errors };
 }
+
+export function validateStore(body) {
+  const errors = {};
+
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  if (name.length < 2 || name.length > 100) {
+    errors.name = 'Name must be between 2 and 100 characters.';
+  }
+
+  const address = typeof body.address === 'string' ? body.address.trim() : '';
+  if (address.length < 5 || address.length > 200) {
+    errors.address = 'Address must be between 5 and 200 characters.';
+  }
+
+  const phone = normalizePhone(body.phone);
+  if (phone !== '') {
+    if (!PHONE_PATTERN.test(phone)) {
+      errors.phone = 'Phone must be in international format, for example +27721234567.';
+    }
+  }
+
+  return { errors, name, address, phone };
+}
