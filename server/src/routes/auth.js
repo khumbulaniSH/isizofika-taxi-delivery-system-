@@ -8,6 +8,7 @@ import {
 } from '../auth/token.js';
 import { validateRegistration, validateLogin } from '../validation.js';
 import { requireAuth } from '../auth/requireAuth.js';
+import { checkLimit, recordFailure, clearPhone } from '../auth/loginRateLimit.js';
 
 const authRouter = express.Router();
 
@@ -56,6 +57,15 @@ authRouter.post('/login', async (req, res) => {
     return;
   }
 
+  const limit = checkLimit(phone, req);
+  if (limit.blocked) {
+    res
+      .status(429)
+      .set('Retry-After', limit.retryAfter)
+      .json({ error: 'Too many attempts. Try again later.' });
+    return;
+  }
+
   const result = await pool.query(
     `SELECT ${PUBLIC_USER_COLUMNS}, password_hash
      FROM users
@@ -67,11 +77,13 @@ authRouter.post('/login', async (req, res) => {
 
   if (!user) {
     await burnPasswordCycles(body.password);
+    recordFailure(phone, req);
     res.status(401).json({ error: INVALID_CREDENTIALS_MESSAGE });
     return;
   }
 
   if (!user.is_active) {
+    recordFailure(phone, req);
     res.status(401).json({ error: INVALID_CREDENTIALS_MESSAGE });
     return;
   }
@@ -79,9 +91,12 @@ authRouter.post('/login', async (req, res) => {
   const passwordMatches = await verifyPassword(body.password, user.password_hash);
 
   if (!passwordMatches) {
+    recordFailure(phone, req);
     res.status(401).json({ error: INVALID_CREDENTIALS_MESSAGE });
     return;
   }
+
+  clearPhone(phone);
 
   const token = generateToken();
 
