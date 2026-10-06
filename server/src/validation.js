@@ -82,25 +82,98 @@ export function validateChangePassword(body) {
   return { errors };
 }
 
+function storeNameError(name) {
+  if (name.length < 2 || name.length > 100) {
+    return 'Name must be between 2 and 100 characters.';
+  }
+  return null;
+}
+
+function storeAddressError(address) {
+  if (address.length < 5 || address.length > 200) {
+    return 'Address must be between 5 and 200 characters.';
+  }
+  return null;
+}
+
+function storePhoneError(phone) {
+  if (phone !== '' && !PHONE_PATTERN.test(phone)) {
+    return 'Phone must be in international format, for example +27721234567.';
+  }
+  return null;
+}
+
 export function validateStore(body) {
   const errors = {};
 
   const name = typeof body.name === 'string' ? body.name.trim() : '';
-  if (name.length < 2 || name.length > 100) {
-    errors.name = 'Name must be between 2 and 100 characters.';
+  const nameError = storeNameError(name);
+  if (nameError !== null) {
+    errors.name = nameError;
   }
 
   const address = typeof body.address === 'string' ? body.address.trim() : '';
-  if (address.length < 5 || address.length > 200) {
-    errors.address = 'Address must be between 5 and 200 characters.';
+  const addressError = storeAddressError(address);
+  if (addressError !== null) {
+    errors.address = addressError;
   }
 
   const phone = normalizePhone(body.phone);
-  if (phone !== '') {
-    if (!PHONE_PATTERN.test(phone)) {
+  const phoneError = storePhoneError(phone);
+  if (phoneError !== null) {
+    errors.phone = phoneError;
+  }
+
+  return { errors, name, address, phone };
+}
+
+export function validateStoreUpdate(body) {
+  const errors = {};
+  const updates = {};
+
+  if (Object.prototype.hasOwnProperty.call(body, 'name')) {
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    const nameError = storeNameError(name);
+    if (nameError !== null) {
+      errors.name = nameError;
+    } else {
+      updates.name = name;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'address')) {
+    const address = typeof body.address === 'string' ? body.address.trim() : '';
+    const addressError = storeAddressError(address);
+    if (addressError !== null) {
+      errors.address = addressError;
+    } else {
+      updates.address = address;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'phone')) {
+    if (body.phone === null) {
+      updates.phone = null;
+    } else if (typeof body.phone === 'string') {
+      const phone = normalizePhone(body.phone);
+      const phoneError = storePhoneError(phone);
+      if (phoneError !== null) {
+        errors.phone = phoneError;
+      } else {
+        updates.phone = phone === '' ? null : phone;
+      }
+    } else {
       errors.phone = 'Phone must be in international format, for example +27721234567.';
     }
   }
 
-  return { errors, name, address, phone };
+  if (Object.prototype.hasOwnProperty.call(body, 'is_active')) {
+    if (typeof body.is_active !== 'boolean') {
+      errors.is_active = 'is_active must be true or false.';
+    } else {
+      updates.is_active = body.is_active;
+    }
+  }
+
+  return { errors, updates };
 }

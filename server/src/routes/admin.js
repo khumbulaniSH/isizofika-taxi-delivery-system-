@@ -1,7 +1,7 @@
 import express from 'express';
 import { pool } from '../db.js';
 import { hashPassword } from '../auth/password.js';
-import { validateRegistration, validateStore, isValidUuid } from '../validation.js';
+import { validateRegistration, validateStore, validateStoreUpdate, isValidUuid } from '../validation.js';
 import { requireAuth } from '../auth/requireAuth.js';
 import { requireRole } from '../auth/requireRole.js';
 
@@ -107,6 +107,77 @@ adminRouter.get(
     } catch (err) {
       console.error('Admin list stores failed:', err.message);
       res.status(500).json({ error: 'Could not fetch stores.' });
+    }
+  },
+);
+
+adminRouter.patch(
+  '/stores/:id',
+  requireAuth,
+  requireRole('admin'),
+  async (req, res) => {
+    const storeId = req.params.id;
+
+    if (!isValidUuid(storeId)) {
+      res.status(400).json({ error: 'Invalid store id.' });
+      return;
+    }
+
+    const body = req.body ?? {};
+    const { errors, updates } = validateStoreUpdate(body);
+
+    if (Object.keys(errors).length > 0) {
+      res.status(400).json({ errors });
+      return;
+    }
+
+    const FIELD_COLUMNS = {
+      name: 'name',
+      address: 'address',
+      phone: 'phone',
+      is_active: 'is_active',
+    };
+
+    const sets = [];
+    const values = [];
+
+    for (const field of Object.keys(FIELD_COLUMNS)) {
+      if (Object.prototype.hasOwnProperty.call(updates, field)) {
+        values.push(updates[field]);
+        sets.push(`${FIELD_COLUMNS[field]} = $${values.length}`);
+      }
+    }
+
+    if (sets.length === 0) {
+      res
+        .status(400)
+        .json({ error: 'Provide at least one of name, address, phone, is_active.' });
+      return;
+    }
+
+    values.push(storeId);
+
+    try {
+      const result = await pool.query(
+        `UPDATE stores SET ${sets.join(', ')}
+         WHERE id = $${values.length}
+         RETURNING ${STORE_COLUMNS}`,
+        values,
+      );
+
+      if (result.rows.length === 0) {
+        res.status(404).json({ error: 'Store not found.' });
+        return;
+      }
+
+      res.status(200).json({ store: result.rows[0] });
+    } catch (err) {
+      if (err.code === '23505') {
+        res.status(409).json({ error: STORE_DUPLICATE_MESSAGE });
+        return;
+      }
+      console.error('Admin update store failed:', err.message);
+      res.status(500).json({ error: 'Could not update the store.' });
     }
   },
 );
