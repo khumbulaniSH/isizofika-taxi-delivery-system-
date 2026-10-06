@@ -57,3 +57,22 @@ export function validateLogin(body) {
 
   return { errors, phone };
 }
+
+export function validateChangePassword(body) {
+  const errors = {};
+
+  if (typeof body.current_password !== 'string') {
+    errors.current_password = 'Current password is required.';
+  }
+
+  if (typeof body.new_password !== 'string' || body.new_password.length < MIN_PASSWORD_LENGTH) {
+    errors.new_password = `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`;
+    return { errors };
+  }
+
+  if (body.new_password === body.current_password) {
+    errors.new_password = 'New password must be different from current password.';
+  }
+
+  return { errors };
+}

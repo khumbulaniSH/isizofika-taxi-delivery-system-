@@ -6,7 +6,11 @@ import {
   hashToken,
   SESSION_TTL_DAYS,
 } from '../auth/token.js';
-import { validateRegistration, validateLogin } from '../validation.js';
+import {
+  validateRegistration,
+  validateLogin,
+  validateChangePassword,
+} from '../validation.js';
 import { requireAuth } from '../auth/requireAuth.js';
 import { checkLimit, recordFailure, clearPhone } from '../auth/loginRateLimit.js';
 
@@ -127,6 +131,71 @@ authRouter.post('/logout', requireAuth, async (req, res) => {
     ]);
   } catch (err) {
     // Swallow query errors to keep the response consistent and avoid leaking details
+  }
+
+  res.status(204).end();
+});
+
+authRouter.post('/change-password', requireAuth, async (req, res) => {
+  const limit = checkLimit(req.user.phone, req);
+  if (limit.blocked) {
+    res
+      .status(429)
+      .set('Retry-After', limit.retryAfter)
+      .json({ error: 'Too many attempts. Try again later.' });
+    return;
+  }
+
+  const body = req.body ?? {};
+  const { errors } = validateChangePassword(body);
+
+  if (Object.keys(errors).length > 0) {
+    res.status(400).json({ errors });
+    return;
+  }
+
+  const currentPassword = body.current_password;
+  const newPassword = body.new_password;
+
+  const userResult = await pool.query(
+    'SELECT password_hash FROM users WHERE id = $1',
+    [req.user.id],
+  );
+
+  const storedHash = userResult.rows[0]?.password_hash;
+  const passwordMatches = storedHash
+    ? await verifyPassword(currentPassword, storedHash)
+    : false;
+
+  if (!passwordMatches) {
+    recordFailure(req.user.phone, req);
+    res.status(403).json({ error: 'Current password is incorrect.' });
+    return;
+  }
+
+  clearPhone(req.user.phone);
+
+  const newPasswordHash = await hashPassword(newPassword);
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('UPDATE users SET password_hash = $1 WHERE id = $2', [
+      newPasswordHash,
+      req.user.id,
+    ]);
+    await client.query(
+      'DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2',
+      [req.user.id, req.tokenHash],
+    );
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Change password failed:', err.message);
+    res.status(500).json({ error: 'Could not change the password.' });
+    return;
+  } finally {
+    client.release();
   }
 
   res.status(204).end();
