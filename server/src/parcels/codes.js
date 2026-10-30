@@ -10,6 +10,21 @@ function requireHexKey(variableName) {
   if (typeof value !== 'string' || !HEX_KEY_PATTERN.test(value)) {
     throw new Error(`${variableName} must be set to 64 hex characters.`);
   }
+  if (/^(.)\1*$/.test(value)) {
+    throw new Error(`${variableName} must not be a single repeated character.`);
+  }
+
+  const otherName =
+    variableName === 'PARCEL_CODE_HMAC_KEY' ? 'PARCEL_CODE_KEY' : 'PARCEL_CODE_HMAC_KEY';
+  const otherValue = process.env[otherName];
+  if (
+    typeof otherValue === 'string' &&
+    HEX_KEY_PATTERN.test(otherValue) &&
+    otherValue.toLowerCase() === value.toLowerCase()
+  ) {
+    throw new Error(`${variableName} and ${otherName} must be different values.`);
+  }
+
   return Buffer.from(value, 'hex');
 }
 
