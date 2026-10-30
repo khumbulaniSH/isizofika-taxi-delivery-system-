@@ -127,6 +127,73 @@ export function validateStore(body) {
   return { errors, name, address, phone };
 }
 
+function rankNameError(name) {
+  if (name.length < 2 || name.length > 100) {
+    return 'Name must be between 2 and 100 characters.';
+  }
+  return null;
+}
+
+function rankTownError(town) {
+  if (town.length < 2 || town.length > 100) {
+    return 'Town must be between 2 and 100 characters.';
+  }
+  return null;
+}
+
+export function validateTaxiRank(body) {
+  const errors = {};
+
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  const nameError = rankNameError(name);
+  if (nameError !== null) {
+    errors.name = nameError;
+  }
+
+  const town = typeof body.town === 'string' ? body.town.trim() : '';
+  const townError = rankTownError(town);
+  if (townError !== null) {
+    errors.town = townError;
+  }
+
+  return { errors, name, town };
+}
+
+export function validateTaxiRankUpdate(body) {
+  const errors = {};
+  const updates = {};
+
+  if (Object.prototype.hasOwnProperty.call(body, 'name')) {
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    const nameError = rankNameError(name);
+    if (nameError !== null) {
+      errors.name = nameError;
+    } else {
+      updates.name = name;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'town')) {
+    const town = typeof body.town === 'string' ? body.town.trim() : '';
+    const townError = rankTownError(town);
+    if (townError !== null) {
+      errors.town = townError;
+    } else {
+      updates.town = town;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'is_active')) {
+    if (typeof body.is_active !== 'boolean') {
+      errors.is_active = 'is_active must be true or false.';
+    } else {
+      updates.is_active = body.is_active;
+    }
+  }
+
+  return { errors, updates };
+}
+
 export function validateStoreUpdate(body) {
   const errors = {};
   const updates = {};
