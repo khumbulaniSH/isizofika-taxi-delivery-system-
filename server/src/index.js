@@ -4,12 +4,14 @@ import { authRouter } from './routes/auth.js';
 import { adminRouter } from './routes/admin.js';
 import { storesRouter } from './routes/stores.js';
 import { adminRanksRouter } from './routes/adminRanks.js';
+import { ranksRouter } from './routes/ranks.js';
 
 const app = express();
 app.use(express.json());
 app.use('/auth', authRouter);
 app.use('/admin', adminRouter);
 app.use('/admin/ranks', adminRanksRouter);
+app.use('/ranks', ranksRouter);
 app.use('/stores', storesRouter);
 
 app.get('/health', async (req, res) => {
