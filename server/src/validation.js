@@ -244,3 +244,130 @@ export function validateStoreUpdate(body) {
 
   return { errors, updates };
 }
+
+const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+function johannesburgTodayIso() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Africa/Johannesburg',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
+function addDaysIso(isoDate, days) {
+  const [year, month, day] = isoDate.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + days));
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(date.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function isRealCalendarDate(value) {
+  const match = DATE_PATTERN.exec(value);
+  if (!match) {
+    return false;
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
+export function validateParcel(body) {
+  const errors = {};
+
+  const rankId = typeof body.rank_id === 'string' ? body.rank_id.trim() : '';
+  if (!isValidUuid(rankId)) {
+    errors.rank_id = 'rank_id must be a valid uuid.';
+  }
+
+  let storeId = null;
+  if (
+    Object.prototype.hasOwnProperty.call(body, 'store_id') &&
+    body.store_id !== null &&
+    body.store_id !== undefined
+  ) {
+    if (typeof body.store_id === 'string' && isValidUuid(body.store_id.trim())) {
+      storeId = body.store_id.trim();
+    } else {
+      errors.store_id = 'store_id must be a valid uuid.';
+    }
+  }
+
+  const recipientName = typeof body.recipient_name === 'string' ? body.recipient_name.trim() : '';
+  if (recipientName.length < 2 || recipientName.length > 100) {
+    errors.recipient_name = 'Recipient name must be between 2 and 100 characters.';
+  }
+
+  const recipientPhone = normalizePhone(body.recipient_phone);
+  if (!PHONE_PATTERN.test(recipientPhone)) {
+    errors.recipient_phone = 'Phone must be in international format, for example +27721234567.';
+  }
+
+  let recipientEmail = null;
+  if (
+    Object.prototype.hasOwnProperty.call(body, 'recipient_email') &&
+    body.recipient_email !== null &&
+    body.recipient_email !== undefined
+  ) {
+    recipientEmail = normalizeEmail(body.recipient_email);
+    if (recipientEmail !== null) {
+      if (!EMAIL_PATTERN.test(recipientEmail) || recipientEmail.length > 254) {
+        errors.recipient_email = 'Email must be a valid address of at most 254 characters.';
+        recipientEmail = null;
+      }
+    }
+  }
+
+  let description = null;
+  if (
+    Object.prototype.hasOwnProperty.call(body, 'description') &&
+    body.description !== null &&
+    body.description !== undefined
+  ) {
+    if (typeof body.description === 'string') {
+      const trimmed = body.description.trim();
+      if (trimmed !== '') {
+        if (trimmed.length > 200) {
+          errors.description = 'Description must be at most 200 characters.';
+        } else {
+          description = trimmed;
+        }
+      }
+    } else {
+      errors.description = 'Description must be at most 200 characters.';
+    }
+  }
+
+  const handoverDate = typeof body.handover_date === 'string' ? body.handover_date.trim() : '';
+  if (!isRealCalendarDate(handoverDate)) {
+    errors.handover_date = 'handover_date must be a real calendar date in YYYY-MM-DD format.';
+  } else {
+    const today = johannesburgTodayIso();
+    const maxDate = addDaysIso(today, 14);
+    if (handoverDate < today) {
+      errors.handover_date = 'handover_date cannot be earlier than today.';
+    } else if (handoverDate > maxDate) {
+      errors.handover_date = 'handover_date cannot be more than 14 days from today.';
+    }
+  }
+
+  return {
+    errors,
+    rankId,
+    storeId,
+    recipientName,
+    recipientPhone,
+    recipientEmail,
+    description,
+    handoverDate,
+  };
+}
