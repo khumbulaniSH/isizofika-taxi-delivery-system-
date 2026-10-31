@@ -22,6 +22,7 @@ function parcelColumns({ includeSender, includeSenderCodeEnc }) {
     `to_char(p.handover_date, 'YYYY-MM-DD') AS handover_date`,
     `${DISPLAYED_STATUS_SQL} AS status`,
     'p.created_at',
+    'p.arrived_at',
   ];
 
   if (includeSender) {
@@ -57,6 +58,7 @@ export function serializeParcelRow(row, { senderCodePart } = {}) {
     handover_date: row.handover_date,
     status: row.status,
     created_at: row.created_at,
+    arrived_at: row.arrived_at,
   };
 
   if (row.sender_full_name !== undefined) {

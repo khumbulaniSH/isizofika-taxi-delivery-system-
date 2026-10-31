@@ -6,6 +6,7 @@ import { storesRouter } from './routes/stores.js';
 import { adminRanksRouter } from './routes/adminRanks.js';
 import { ranksRouter } from './routes/ranks.js';
 import { parcelsRouter } from './routes/parcels.js';
+import { parcelActionsRouter } from './routes/parcelActions.js';
 
 const app = express();
 app.use(express.json());
@@ -14,6 +15,7 @@ app.use('/admin', adminRouter);
 app.use('/admin/ranks', adminRanksRouter);
 app.use('/ranks', ranksRouter);
 app.use('/parcels', parcelsRouter);
+app.use('/parcels', parcelActionsRouter);
 app.use('/stores', storesRouter);
 
 app.get('/health', async (req, res) => {
