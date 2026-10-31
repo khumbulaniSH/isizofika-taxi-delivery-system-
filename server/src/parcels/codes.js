@@ -53,6 +53,22 @@ export function hashCode(reference, code) {
     .digest('hex');
 }
 
+export function verifyCode(reference, code, storedHash) {
+  if (typeof storedHash !== 'string') {
+    return false;
+  }
+
+  const computedHash = hashCode(reference, code);
+  const computedBuffer = Buffer.from(computedHash, 'hex');
+  const storedBuffer = Buffer.from(storedHash, 'hex');
+
+  if (computedBuffer.length !== storedBuffer.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(computedBuffer, storedBuffer);
+}
+
 export function encryptString(plaintext) {
   const key = requireHexKey('PARCEL_CODE_KEY');
   const iv = crypto.randomBytes(IV_LENGTH);

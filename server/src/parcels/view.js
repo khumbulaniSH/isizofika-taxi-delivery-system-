@@ -23,10 +23,12 @@ function parcelColumns({ includeSender, includeSenderCodeEnc }) {
     `${DISPLAYED_STATUS_SQL} AS status`,
     'p.created_at',
     'p.arrived_at',
+    'p.collected_at',
   ];
 
   if (includeSender) {
     columns.push('u.full_name AS sender_full_name', 'u.phone AS sender_phone');
+    columns.push('p.locked_at IS NOT NULL AS release_locked');
   }
 
   if (includeSenderCodeEnc) {
@@ -59,7 +61,12 @@ export function serializeParcelRow(row, { senderCodePart } = {}) {
     status: row.status,
     created_at: row.created_at,
     arrived_at: row.arrived_at,
+    collected_at: row.collected_at,
   };
+
+  if (row.release_locked !== undefined) {
+    parcel.release_locked = row.release_locked;
+  }
 
   if (row.sender_full_name !== undefined) {
     parcel.sender = {
