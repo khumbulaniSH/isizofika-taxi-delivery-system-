@@ -438,3 +438,32 @@ export function validateParcelListQuery(query) {
 
   return { errors, status, reference, page, limit };
 }
+
+export function validateAppSettingsUpdate(body) {
+  const errors = {};
+  const updates = {};
+
+  if (Object.prototype.hasOwnProperty.call(body, 'storage_free_days')) {
+    const value = body.storage_free_days;
+    if (typeof value !== 'number' || !Number.isInteger(value)) {
+      errors.storage_free_days = 'storage_free_days must be an integer.';
+    } else if (value < 0 || value > 60) {
+      errors.storage_free_days = 'storage_free_days must be between 0 and 60.';
+    } else {
+      updates.storage_free_days = value;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'storage_fee_per_day_cents')) {
+    const value = body.storage_fee_per_day_cents;
+    if (typeof value !== 'number' || !Number.isInteger(value)) {
+      errors.storage_fee_per_day_cents = 'storage_fee_per_day_cents must be an integer.';
+    } else if (value < 0 || value > 100000) {
+      errors.storage_fee_per_day_cents = 'storage_fee_per_day_cents must be between 0 and 100000.';
+    } else {
+      updates.storage_fee_per_day_cents = value;
+    }
+  }
+
+  return { errors, updates };
+}

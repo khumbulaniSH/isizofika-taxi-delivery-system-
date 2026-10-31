@@ -1,3 +1,5 @@
+import { DAYS_OVERDUE_SQL, FEE_CENTS_SQL } from './fees.js';
+
 const DISPLAYED_STATUS_SQL = `CASE WHEN p.status = 'created' AND p.handover_date <= (now() AT TIME ZONE 'Africa/Johannesburg')::date THEN 'in_transit' ELSE p.status END`;
 
 const PARCEL_FROM = `FROM parcels p
@@ -24,6 +26,8 @@ function parcelColumns({ includeSender, includeSenderCodeEnc }) {
     'p.created_at',
     'p.arrived_at',
     'p.collected_at',
+    `${DAYS_OVERDUE_SQL} AS days_overdue`,
+    `${FEE_CENTS_SQL} AS fee_cents`,
   ];
 
   if (includeSender) {
@@ -62,6 +66,10 @@ export function serializeParcelRow(row, { senderCodePart } = {}) {
     created_at: row.created_at,
     arrived_at: row.arrived_at,
     collected_at: row.collected_at,
+    storage: {
+      days_overdue: row.days_overdue,
+      fee_cents: row.fee_cents,
+    },
   };
 
   if (row.release_locked !== undefined) {
