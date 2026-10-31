@@ -1,6 +1,6 @@
 import express from 'express';
 import { pool } from '../db.js';
-import { validateParcel } from '../validation.js';
+import { validateParcel, validateParcelListQuery, isValidUuid } from '../validation.js';
 import { requireAuth } from '../auth/requireAuth.js';
 import { requireRole } from '../auth/requireRole.js';
 import {
@@ -8,15 +8,66 @@ import {
   generateReference,
   hashCode,
   encryptString,
+  decryptString,
 } from '../parcels/codes.js';
 import {
   buildNotificationRows,
   printDevNotifications,
 } from '../parcels/notifications.js';
+import {
+  buildParcelSelect,
+  serializeParcelRow,
+  DISPLAYED_STATUS_SQL,
+} from '../parcels/view.js';
 
 const parcelsRouter = express.Router();
 
 const MAX_REFERENCE_ATTEMPTS = 5;
+
+const PARCEL_NOT_FOUND_MESSAGE = 'Parcel not found.';
+const STORE_NOT_ATTACHED_MESSAGE = 'Your account is not attached to a store.';
+
+function parcelVisibility(user) {
+  if (user.role === 'sender') {
+    return {
+      roleClause: 'p.sender_id = $1',
+      roleValues: [user.id],
+      includeSender: false,
+      includeSenderCodeEnc: true,
+    };
+  }
+
+  if (user.role === 'store_staff') {
+    if (user.store_id === null || user.store_id === undefined) {
+      return null;
+    }
+    return {
+      roleClause: 'p.destination_store_id = $1',
+      roleValues: [user.store_id],
+      includeSender: true,
+      includeSenderCodeEnc: false,
+    };
+  }
+
+  if (user.role === 'admin') {
+    return {
+      roleClause: null,
+      roleValues: [],
+      includeSender: true,
+      includeSenderCodeEnc: false,
+    };
+  }
+
+  return null;
+}
+
+function senderCodePartFromRow(row) {
+  try {
+    return decryptString(row.sender_code_part_enc);
+  } catch {
+    return null;
+  }
+}
 
 parcelsRouter.post(
   '/',
@@ -235,5 +286,145 @@ parcelsRouter.post(
     res.status(201).json({ parcel, sender_code_part: senderCodePart });
   },
 );
+
+parcelsRouter.get('/', requireAuth, async (req, res) => {
+  const visibility = parcelVisibility(req.user);
+  if (visibility === null) {
+    if (req.user.role === 'store_staff') {
+      res.status(403).json({ error: STORE_NOT_ATTACHED_MESSAGE });
+      return;
+    }
+    res.status(403).json({ error: 'You do not have permission to view parcels.' });
+    return;
+  }
+
+  const { errors, status, reference, page, limit } = validateParcelListQuery(req.query);
+
+  if (Object.keys(errors).length > 0) {
+    res.status(400).json({ errors });
+    return;
+  }
+
+  const conditions = [];
+  const values = [];
+
+  if (visibility.roleClause !== null) {
+    values.push(...visibility.roleValues);
+    conditions.push(visibility.roleClause);
+  }
+
+  if (status !== null) {
+    values.push(status);
+    conditions.push(`${DISPLAYED_STATUS_SQL} = $${values.length}`);
+  }
+
+  if (reference !== null) {
+    values.push(reference);
+    conditions.push(`p.reference = $${values.length}`);
+  }
+
+  const whereSql = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const offset = (page - 1) * limit;
+  values.push(limit, offset);
+
+  const selectSql = buildParcelSelect({
+    includeSender: visibility.includeSender,
+    includeSenderCodeEnc: visibility.includeSenderCodeEnc,
+  });
+
+  let rows;
+  let total;
+  try {
+    const listResult = await pool.query(
+      `${selectSql} ${whereSql}
+       ORDER BY p.created_at DESC, p.id
+       LIMIT $${values.length - 1} OFFSET $${values.length}`,
+      values,
+    );
+    rows = listResult.rows;
+
+    const countValues = values.slice(0, values.length - 2);
+    const countResult = await pool.query(
+      `SELECT COUNT(*)::int AS total
+       FROM parcels p
+       ${whereSql}`,
+      countValues,
+    );
+    total = countResult.rows[0].total;
+  } catch (err) {
+    console.error('List parcels failed:', err.message);
+    res.status(500).json({ error: 'Could not fetch parcels.' });
+    return;
+  }
+
+  const parcels = rows.map((row) => {
+    if (visibility.includeSenderCodeEnc) {
+      const senderCodePart = senderCodePartFromRow(row);
+      return serializeParcelRow(row, { senderCodePart });
+    }
+    return serializeParcelRow(row);
+  });
+
+  res.status(200).json({ parcels, page, limit, total });
+});
+
+parcelsRouter.get('/:id', requireAuth, async (req, res) => {
+  const parcelId = req.params.id;
+
+  if (!isValidUuid(parcelId)) {
+    res.status(400).json({ error: 'Invalid parcel id.' });
+    return;
+  }
+
+  const visibility = parcelVisibility(req.user);
+  if (visibility === null) {
+    if (req.user.role === 'store_staff') {
+      res.status(403).json({ error: STORE_NOT_ATTACHED_MESSAGE });
+      return;
+    }
+    res.status(403).json({ error: 'You do not have permission to view parcels.' });
+    return;
+  }
+
+  const values = [...visibility.roleValues, parcelId];
+
+  let whereSql = `p.id = $${values.length}`;
+  if (visibility.roleClause !== null) {
+    whereSql = `${visibility.roleClause} AND ${whereSql}`;
+  }
+
+  const selectSql = buildParcelSelect({
+    includeSender: visibility.includeSender,
+    includeSenderCodeEnc: visibility.includeSenderCodeEnc,
+  });
+
+  let row;
+  try {
+    const result = await pool.query(
+      `${selectSql} WHERE ${whereSql}`,
+      values,
+    );
+    row = result.rows[0];
+  } catch (err) {
+    console.error('Get parcel failed:', err.message);
+    res.status(500).json({ error: 'Could not fetch the parcel.' });
+    return;
+  }
+
+  if (!row) {
+    res.status(404).json({ error: PARCEL_NOT_FOUND_MESSAGE });
+    return;
+  }
+
+  let payload;
+  if (visibility.includeSenderCodeEnc) {
+    const senderCodePart = senderCodePartFromRow(row);
+    payload = serializeParcelRow(row, { senderCodePart });
+  } else {
+    payload = serializeParcelRow(row);
+  }
+
+  res.status(200).json({ parcel: payload });
+});
 
 export { parcelsRouter };

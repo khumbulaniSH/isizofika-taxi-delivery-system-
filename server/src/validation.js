@@ -371,3 +371,70 @@ export function validateParcel(body) {
     handoverDate,
   };
 }
+
+const PARCEL_STATUS_VALUES = ['created', 'in_transit', 'arrived', 'collected'];
+const PARCEL_REFERENCE_PATTERN = /^ISZ-[ABCDEFGHJKMNPQRSTUVWXYZ2-9]{6}$/;
+const PARCEL_LIST_DEFAULT_LIMIT = 20;
+const PARCEL_LIST_MAX_LIMIT = 50;
+
+export function validateParcelListQuery(query) {
+  const errors = {};
+
+  let status = null;
+  if (query.status !== undefined && query.status !== null && query.status !== '') {
+    if (typeof query.status === 'string' && PARCEL_STATUS_VALUES.includes(query.status)) {
+      status = query.status;
+    } else {
+      errors.status = `Status must be one of: ${PARCEL_STATUS_VALUES.join(', ')}.`;
+    }
+  }
+
+  let reference = null;
+  if (query.reference !== undefined && query.reference !== null && query.reference !== '') {
+    if (typeof query.reference === 'string') {
+      const upper = query.reference.trim().toUpperCase();
+      if (!PARCEL_REFERENCE_PATTERN.test(upper)) {
+        errors.reference = 'Reference must look like ISZ-XXXXXX using the allowed characters.';
+      } else {
+        reference = upper;
+      }
+    } else {
+      errors.reference = 'Reference must look like ISZ-XXXXXX using the allowed characters.';
+    }
+  }
+
+  let page = 1;
+  if (query.page !== undefined && query.page !== null && query.page !== '') {
+    if (typeof query.page !== 'string') {
+      errors.page = 'Page must be an integer of at least 1.';
+    } else {
+      const parsed = Number(query.page);
+      if (!Number.isInteger(parsed) || parsed < 1 || String(query.page).trim() === '') {
+        errors.page = 'Page must be an integer of at least 1.';
+      } else {
+        page = parsed;
+      }
+    }
+  }
+
+  let limit = PARCEL_LIST_DEFAULT_LIMIT;
+  if (query.limit !== undefined && query.limit !== null && query.limit !== '') {
+    if (typeof query.limit !== 'string') {
+      errors.limit = `Limit must be an integer between 1 and ${PARCEL_LIST_MAX_LIMIT}.`;
+    } else {
+      const parsed = Number(query.limit);
+      if (
+        !Number.isInteger(parsed) ||
+        parsed < 1 ||
+        parsed > PARCEL_LIST_MAX_LIMIT ||
+        String(query.limit).trim() === ''
+      ) {
+        errors.limit = `Limit must be an integer between 1 and ${PARCEL_LIST_MAX_LIMIT}.`;
+      } else {
+        limit = parsed;
+      }
+    }
+  }
+
+  return { errors, status, reference, page, limit };
+}
